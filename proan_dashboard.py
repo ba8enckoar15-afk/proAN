@@ -102,7 +102,8 @@ def find_similar_sequences(user_seq, database_df, num_results=5):
 def main():
     st.set_page_config(page_title="ProAn", layout="wide")
     st.title("🧬 ProAn — Анализ белков")
-    
+    st.write("--- Версия кода: 2023-11-20-1 ---")
+
     df = load_dataset()
 
     st.sidebar.header("Настройки")
