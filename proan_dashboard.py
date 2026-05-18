@@ -52,7 +52,7 @@ def find_similar_sequences(user_seq, database_df, num_results=5):
         return []
 
     results = []
-    len_threshold_percent = 0.20 # 20%
+    len_threshold_percent = 0.20
     len_threshold_abs = len(user_seq) * len_threshold_percent
     
     candidate_df = database_df[
@@ -64,8 +64,11 @@ def find_similar_sequences(user_seq, database_df, num_results=5):
         return []
 
     for index, row in candidate_df.iterrows():
-        db_seq = row["Sequence"]
+        db_seq = str(row["Sequence"]).strip().upper()
         
+        if not db_seq or not all(aa in "ACDEFGHIKLMNPQRSTVWY" for aa in db_seq):
+            continue
+
         alignments = pairwise2.align.localds(user_seq, db_seq, 1, -1, -1, -0.1)
         
         if alignments:
