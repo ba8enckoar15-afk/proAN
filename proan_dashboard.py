@@ -69,7 +69,7 @@ def find_similar_sequences(user_seq, database_df, num_results=5):
         if not db_seq or not all(aa in "ACDEFGHIKLMNPQRSTVWY" for aa in db_seq):
             continue
 
-        alignments = pairwise2.align.localds(user_seq, db_seq, 1, -1, -1, -0.1)
+        alignments = pairwise2.align.localds(user_seq, db_seq, 1, -1, -5)
         
         if alignments:
             best_alignment = alignments[0]
