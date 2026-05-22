@@ -51,32 +51,31 @@ def kyte_doolittle(seq, window=11):
 
 @st.cache_data
 def find_similar_sequences(user_seq, database_df, num_results=5):
-    if not user_seq or not all(aa in "ACDEFGHIKLMNPQRSTVWY" for aa in user_seq):
+    cleaned_user_seq = "".join(aa for aa in user_seq.upper() if aa in "ACDEFGHIKLMNPQRSTVWY")
+    if not cleaned_user_seq:
         return []
 
     results = []
-    len_threshold_percent = 0.75
-    len_threshold_abs = len(user_seq) * len_threshold_percent
+    len_threshold_percent = 0.20
+    len_threshold_abs = len(cleaned_user_seq) * len_threshold_percent
     
     candidate_df = database_df[
-        (database_df["Length"] >= len(user_seq) - len_threshold_abs) & 
-        (database_df["Length"] <= len(user_seq) + len_threshold_abs)
+        (database_df["Length"] >= len(cleaned_user_seq) - len_threshold_abs) & 
+        (database_df["Length"] <= len(cleaned_user_seq) + len_threshold_abs)
     ]
     
     if candidate_df.empty:
         return []
 
     for index, row in candidate_df.iterrows():
-        db_seq = str(row["Sequence"]).strip().upper()
+        raw_db_seq = str(row["Sequence"])
+        cleaned_db_seq = "".join(aa for aa in raw_db_seq.upper() if aa in "ACDEFGHIKLMNPQRSTVWY")
         
-        if not db_seq or not all(aa in "ACDEFGHIKLMNPQRSTVWY" for aa in db_seq):
-            continue
-
-        if not user_seq or not db_seq: 
+        if not cleaned_db_seq:
             continue
 
         try:
-            alignments = pairwise2.align.localds(user_seq, db_seq, 1.0, -1.0, -5.0, -1.0)
+            alignments = pairwise2.align.localds(cleaned_user_seq, cleaned_db_seq, 1.0, -1.0, -5.0, -1.0)
             
             if alignments:
                 best_alignment = alignments[0]
@@ -96,12 +95,15 @@ def find_similar_sequences(user_seq, database_df, num_results=5):
                 results.append({
                     "ID": index,
                     "База данных Длина": row["Length"],
-                    "Пользовательская Длина": len(user_seq),
+                    "Пользовательская Длина": len(cleaned_user_seq),
                     "Счет выравнивания": score,
                     "Процент идентичности": identity_percent,
                     "Выравнивание": format_alignment(*best_alignment)
                 })
         except ValueError:
+            continue
+        except TypeError as e:
+            st.error(f"TypeError при выравнивании белка {index}: {e}. Последовательность: {cleaned_db_seq[:50]}...")
             continue
 
     results.sort(key=lambda x: x["Процент идентичности"], reverse=True)
@@ -111,7 +113,7 @@ def find_similar_sequences(user_seq, database_df, num_results=5):
 def main():
     st.set_page_config(page_title="ProAn", layout="wide")
     st.title("🧬 ProAn — Анализ белков")
-    st.write("--- Версия кода: 2023-11-20-2 ---")
+    st.write("--- Версия кода: 2023-11-20-3 ---")
 
     df = load_dataset()
 
@@ -204,7 +206,7 @@ def main():
             st.metric("GRAVY", f"{custom_gravy:.2f}")
         with col_d:
             st.metric("Молекулярная масса", f"{custom_mw:.0f} Da")
-            st.metric("pI", f"{custom_pi:.2f}")
+            st.metric("pI", f"{pi:.2f}")
 
         st.subheader("Визуализация для пользовательской последовательности")
         col_e, col_f = st.columns(2)
