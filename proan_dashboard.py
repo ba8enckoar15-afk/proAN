@@ -75,7 +75,7 @@ def find_similar_sequences(user_seq, database_df, num_results=5):
             continue
 
         try:
-            alignments = pairwise2.align.localds(cleaned_user_seq, cleaned_db_seq, 1.0, -1.0, -5.0, -1.0)
+            alignments = pairwise2.align.localx(cleaned_user_seq, cleaned_db_seq, 1.0, -1.0, -5.0)
             
             if alignments:
                 best_alignment = alignments[0]
@@ -113,7 +113,7 @@ def find_similar_sequences(user_seq, database_df, num_results=5):
 def main():
     st.set_page_config(page_title="ProAn", layout="wide")
     st.title("🧬 ProAn — Анализ белков")
-    st.write("--- Версия кода: 2023-11-20-3 ---")
+    st.write("--- Версия кода: 2023-11-20-4 ---")
 
     df = load_dataset()
 
@@ -207,7 +207,7 @@ def main():
         with col_d:
             st.metric("Молекулярная масса", f"{custom_mw:.0f} Da")
             st.metric("pI", f"{custom_pi:.2f}")
-
+            
         st.subheader("Визуализация для пользовательской последовательности")
         col_e, col_f = st.columns(2)
         with col_e:
