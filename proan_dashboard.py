@@ -75,7 +75,7 @@ def find_similar_sequences(user_seq, database_df, num_results=5):
             continue
 
         try:
-            alignments = pairwise2.align.localxx(cleaned_user_seq, cleaned_db_seq, 1.0, -1.0, -5.0)
+            alignments = pairwise2.align.localxx(cleaned_user_seq, cleaned_db_seq, 1.0, -1.0)
             
             if alignments:
                 best_alignment = alignments[0]
