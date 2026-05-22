@@ -5,7 +5,8 @@ import plotly.express as px
 import plotly.graph_objects as go
 from Bio.SeqUtils.ProtParam import ProteinAnalysis
 from Bio import pairwise2
-from Bio.pairwise2 import format_alignment 
+from Bio.pairwise2 import format_alignment
+from Bio import SeqIO
 import re
 
 @st.cache_data
@@ -37,18 +38,20 @@ def kyte_doolittle(seq, window=11):
         'S': -0.8, 'T': -0.7, 'W': -0.9, 'Y': -1.3, 'V': 4.2
     }
     scores = [kd_scale.get(aa, 0) for aa in seq]
-    windows = []
+    
     actual_window = min(window, len(scores))
+    
     if actual_window == 0:
         return np.array([])
         
+    windows = []
     for i in range(len(scores) - actual_window + 1):
         windows.append(np.mean(scores[i:i+actual_window]))
     return np.array(windows)
 
 @st.cache_data
 def find_similar_sequences(user_seq, database_df, num_results=5):
-    if not user_seq:
+    if not user_seq or not all(aa in "ACDEFGHIKLMNPQRSTVWY" for aa in user_seq):
         return []
 
     results = []
@@ -69,31 +72,37 @@ def find_similar_sequences(user_seq, database_df, num_results=5):
         if not db_seq or not all(aa in "ACDEFGHIKLMNPQRSTVWY" for aa in db_seq):
             continue
 
-        alignments = pairwise2.align.localds(user_seq, db_seq, 1, -1, -5)
-        
-        if alignments:
-            best_alignment = alignments[0]
-            score = best_alignment.score
-            
-            num_identical = 0
-            len_alignment = 0
-            
-            for i in range(len(best_alignment.seqA)):
-                if best_alignment.seqA[i] != '-' and best_alignment.seqB[i] != '-':
-                    len_alignment += 1
-                if best_alignment.seqA[i] == best_alignment.seqB[i]:
-                    num_identical += 1
-            
-            identity_percent = (num_identical / len_alignment * 100) if len_alignment > 0 else 0
+        if not user_seq or not db_seq: 
+            continue
 
-            results.append({
-                "ID": index,
-                "База данных Длина": row["Length"],
-                "Пользовательская Длина": len(user_seq),
-                "Счет выравнивания": score,
-                "Процент идентичности": identity_percent,
-                "Выравнивание": format_alignment(*best_alignment)
-            })
+        try:
+            alignments = pairwise2.align.localds(user_seq, db_seq, 1, -1, -5, -1)
+            
+            if alignments:
+                best_alignment = alignments[0]
+                score = best_alignment.score
+                
+                num_identical = 0
+                len_alignment = 0
+                
+                for i in range(len(best_alignment.seqA)):
+                    if best_alignment.seqA[i] != '-' and best_alignment.seqB[i] != '-':
+                        len_alignment += 1
+                    if best_alignment.seqA[i] == best_alignment.seqB[i]:
+                        num_identical += 1
+                
+                identity_percent = (num_identical / len_alignment * 100) if len_alignment > 0 else 0
+
+                results.append({
+                    "ID": index,
+                    "База данных Длина": row["Length"],
+                    "Пользовательская Длина": len(user_seq),
+                    "Счет выравнивания": score,
+                    "Процент идентичности": identity_percent,
+                    "Выравнивание": format_alignment(*best_alignment)
+                })
+        except ValueError:
+            continue
 
     results.sort(key=lambda x: x["Процент идентичности"], reverse=True)
     return results[:num_results]
@@ -102,7 +111,7 @@ def find_similar_sequences(user_seq, database_df, num_results=5):
 def main():
     st.set_page_config(page_title="ProAn", layout="wide")
     st.title("🧬 ProAn — Анализ белков")
-    st.write("--- Версия кода: 2023-11-20-1 ---")
+    st.write("--- Версия кода: 2023-11-20-2 ---")
 
     df = load_dataset()
 
@@ -116,17 +125,19 @@ def main():
     custom_id = "Пользовательский белок" 
 
     if uploaded_file is not None:
-        fasta_content = uploaded_file.getvalue().decode("utf-8")
-        match = re.search(r'>[^\n]*\n([A-Z\n]+)', fasta_content)
-        if match:
-            temp_seq = match.group(1).replace('\n', '').strip().upper()
-            if all(aa in "ACDEFGHIKLMNPQRSTVWY" for aa in temp_seq) and len(temp_seq) > 0:
-                custom_seq = temp_seq
-                st.sidebar.success("Последовательность из FASTA загружена.")
+        try:
+            fasta_sequences = list(SeqIO.parse(uploaded_file, "fasta"))
+            if fasta_sequences:
+                temp_seq = str(fasta_sequences[0].seq).strip().upper()
+                if all(aa in "ACDEFGHIKLMNPQRSTVWY" for aa in temp_seq) and len(temp_seq) > 0:
+                    custom_seq = temp_seq
+                    st.sidebar.success("Последовательность из FASTA загружена.")
+                else:
+                    st.sidebar.error("Последовательность из FASTA содержит недопустимые символы или пуста.")
             else:
-                st.sidebar.error("Последовательность из FASTA содержит недопустимые символы или пуста.")
-        else:
-            st.sidebar.error("Не удалось найти последовательность в FASTA файле.")
+                st.sidebar.error("В FASTA файле не найдено ни одной последовательности.")
+        except Exception as e:
+            st.sidebar.error(f"Ошибка при чтении FASTA файла: {e}")
     elif user_sequence_input:
         temp_seq = user_sequence_input.strip().upper()
         if all(aa in "ACDEFGHIKLMNPQRSTVWY" for aa in temp_seq) and len(temp_seq) > 0:
@@ -171,10 +182,10 @@ def main():
         filtered_df = filtered_df.sort_values(by=sort_column, ascending=sort_ascending)
 
     if filtered_df.empty:
-        st.sidebar.warning("Нет белков, соответствующих фильтрам.")
-        if not custom_seq:
-            st.stop()
+        st.sidebar.warning("Нет белков, соответствующих фильтрам. Измените фильтры.")
         selected_protein_id = None
+        if not custom_seq:
+            st.info("Введите пользовательскую последовательность или измените фильтры, чтобы увидеть белки из базы данных.")
     else:
         selected_protein_id = st.sidebar.selectbox(
             "Выберите белок из базы данных:", 
@@ -216,21 +227,24 @@ def main():
         num_results_to_show = st.slider("Показать топ N результатов:", 1, 10, 5)
         
         if st.button("Найти совпадения в базе"):
-            with st.spinner('Выполняется поиск совпадений... Это может занять некоторое время для длинных последовательностей.'):
-                similar_proteins = find_similar_sequences(custom_seq, df, num_results=num_results_to_show)
-            
-            if similar_proteins:
-                st.write(f"Найдено {len(similar_proteins)} похожих белков:")
-                for i, prot in enumerate(similar_proteins):
-                    st.markdown(f"**{i+1}. ID: {prot['ID']}**")
-                    st.write(f"   Длина в базе: {prot['База данных Длина']} | Ваша длина: {prot['Пользовательская Длина']}")
-                    st.write(f"   Процент идентичности: {prot['Процент идентичности']:.2f}%")
-                    st.write(f"   Счет выравнивания: {prot['Счет выравнивания']:.2f}")
-                    with st.expander(f"Показать выравнивание для {prot['ID']}"):
-                        st.code(prot['Выравнивание'], language="text")
-                    st.markdown("---")
+            if not custom_seq:
+                st.warning("Пожалуйста, введите или загрузите пользовательскую последовательность для поиска.")
             else:
-                st.write("Похожих белков не найдено.")
+                with st.spinner('Выполняется поиск совпадений... Это может занять некоторое время для длинных последовательностей.'):
+                    similar_proteins = find_similar_sequences(custom_seq, df, num_results=num_results_to_show)
+                
+                if similar_proteins:
+                    st.write(f"Найдено {len(similar_proteins)} похожих белков:")
+                    for i, prot in enumerate(similar_proteins):
+                        st.markdown(f"**{i+1}. ID: {prot['ID']}**")
+                        st.write(f"   Длина в базе: {prot['База данных Длина']} | Ваша длина: {prot['Пользовательская Длина']}")
+                        st.write(f"   Процент идентичности: {prot['Процент идентичности']:.2f}%")
+                        st.write(f"   Счет выравнивания: {prot['Счет выравнивания']:.2f}")
+                        with st.expander(f"Показать выравнивание для {prot['ID']}"):
+                            st.code(prot['Выравнивание'], language="text")
+                        st.markdown("---")
+                else:
+                    st.write("Похожих белков не найдено.")
         
         st.markdown("---")
 
