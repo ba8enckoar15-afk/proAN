@@ -206,7 +206,7 @@ def main():
             st.metric("GRAVY", f"{custom_gravy:.2f}")
         with col_d:
             st.metric("Молекулярная масса", f"{custom_mw:.0f} Da")
-            st.metric("pI", f"{pi:.2f}")
+            st.metric("pI", f"{custom_pi:.2f}")
 
         st.subheader("Визуализация для пользовательской последовательности")
         col_e, col_f = st.columns(2)
